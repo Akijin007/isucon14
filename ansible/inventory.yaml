@@ -1,0 +1,35 @@
+all:
+  vars:
+    tailscale_a_records: # ansibleの実行用
+      S1: isucon-server1
+      S2: isucon-server2
+      S3: isucon-server3
+      B: isucon-server4
+    external_ips: # 外部IP あんまり使うことはないはず
+      S1: XXX.XXX.XXX.XXX
+    internal_ips: # 内部IP サービス間の相互接続に使用
+      S1: XXX.XXX.XXX.XXX
+      B: YYY.YYY.YYY.YYY
+    nginx_ip: "{{ internal_ips.S1 }}"
+    db_ip: "{{ internal_ips.S1 }}"
+    main_web_ip: "{{ internal_ips.S1 }}"
+    ansible_user: ubuntu
+  children:
+    target:
+      children:
+        nginx:
+          hosts:
+            nginx01:
+              ansible_host: "{{ tailscale_a_records.S1 }}"
+        webapp:
+          hosts:
+            webapp01: # 複数デプロイする場合はwebapp02という感じで増やす
+              ansible_host: "{{ tailscale_a_records.S1 }}"
+        db:
+          hosts:
+            db:
+              ansible_host: "{{ tailscale_a_records.S1 }}"
+    outsider:
+      hosts:
+        benchmarker:
+          ansible_host: "{{ tailscale_a_records.B }}"

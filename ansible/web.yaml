@@ -1,0 +1,17 @@
+---
+- name: Build
+  hosts: localhost
+  tasks:
+    - name: Import build
+      ansible.builtin.import_role:
+        name: web
+        tasks_from: build
+
+- name: Deploy
+  hosts: webapp
+  become: true
+  tasks:
+    - name: Import Deploy
+      ansible.builtin.import_role:
+        name: web
+        tasks_from: deploy

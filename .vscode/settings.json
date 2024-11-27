@@ -1,0 +1,8 @@
+{
+    "ansible.python.interpreterPath": "/home/codespace/.python/current/bin/python3",
+    "files.associations": {
+        "*.yaml": "ansible"
+    },
+    "files.insertFinalNewline": true,
+    "editor.formatOnSave": true,
+}
