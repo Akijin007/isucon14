@@ -13,7 +13,7 @@ all:
       S2: 192.168.0.12
       S3: 192.168.0.13
     nginx_ip: "{{ internal_ips.S1 }}"
-    db_ip: "{{ internal_ips.S2 }}"
+    db_ip: "{{ internal_ips.S1 }}"
     main_web_ip: "{{ internal_ips.S1 }}"
     ansible_user: isucon
   children:
@@ -30,4 +30,4 @@ all:
         db:
           hosts:
             db:
-              ansible_host: "{{ tailscale_a_records.S2 }}"
+              ansible_host: "{{ tailscale_a_records.S1 }}"
