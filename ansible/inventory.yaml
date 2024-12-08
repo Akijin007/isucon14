@@ -1,19 +1,21 @@
 all:
   vars:
     tailscale_a_records: # ansibleの実行用
-      S1: isucon-server1
-      S2: isucon-server2
-      S3: isucon-server3
-      B: isucon-server4
+      S1: server1
+      S2: server2
+      S3: server3
     external_ips: # 外部IP あんまり使うことはないはず
-      S1: XXX.XXX.XXX.XXX
+      S1: 57.180.230.123
+      S2: 52.68.104.24
+      S3: 54.64.44.169
     internal_ips: # 内部IP サービス間の相互接続に使用
-      S1: XXX.XXX.XXX.XXX
-      B: YYY.YYY.YYY.YYY
+      S1: 192.168.0.11
+      S2: 192.168.0.12
+      S3: 192.168.0.13
     nginx_ip: "{{ internal_ips.S1 }}"
     db_ip: "{{ internal_ips.S1 }}"
     main_web_ip: "{{ internal_ips.S1 }}"
-    ansible_user: ubuntu
+    ansible_user: isucon
   children:
     target:
       children:

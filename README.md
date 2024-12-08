@@ -16,7 +16,7 @@ cd ansible
 ansible-playbook -i inventory.yaml web.yaml
 
 # sshログイン
-ssh ubuntu@server1
+ssh isucon@server1
 ssh isucon@server1 #ユーザ次第
 
 # ログの閲覧
