@@ -51,10 +51,22 @@ func appPostUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	now := time.Now()
+	newUser := User{
+		ID:             userID,
+		Username:       req.Username,
+		Firstname:      req.FirstName,
+		Lastname:       req.LastName,
+		DateOfBirth:    req.DateOfBirth,
+		AccessToken:    accessToken,
+		InvitationCode: invitationCode,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO users (id, username, firstname, lastname, date_of_birth, access_token, invitation_code) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		userID, req.Username, req.FirstName, req.LastName, req.DateOfBirth, accessToken, invitationCode,
+		"INSERT INTO users (id, username, firstname, lastname, date_of_birth, access_token, invitation_code,created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		userID, req.Username, req.FirstName, req.LastName, req.DateOfBirth, accessToken, invitationCode, now, now,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -124,6 +136,7 @@ func appPostUsers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	userTokenCache.Store(accessToken, newUser)
 
 	http.SetCookie(w, &http.Cookie{
 		Path:  "/",
@@ -288,7 +301,7 @@ type executableGet interface {
 
 func getLatestRideStatus(ctx context.Context, tx executableGet, rideID string) (string, error) {
 	status := ""
-	if val, found := rideStatusCache.Load(rideID); found{
+	if val, found := rideStatusCache.Load(rideID); found {
 		status = val.(string)
 	} else {
 		if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {

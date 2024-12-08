@@ -46,15 +46,28 @@ func chairPostChairs(w http.ResponseWriter, r *http.Request) {
 	chairID := ulid.Make().String()
 	accessToken := secureRandomStr(32)
 
+	now := time.Now()
 	_, err := db.ExecContext(
 		ctx,
-		"INSERT INTO chairs (id, owner_id, name, model, is_active, access_token) VALUES (?, ?, ?, ?, ?, ?)",
-		chairID, owner.ID, req.Name, req.Model, false, accessToken,
+		"INSERT INTO chairs (id, owner_id, name, model, is_active, access_token,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		chairID, owner.ID, req.Name, req.Model, false, accessToken, now, now,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	newChair := Chair{
+		ID:          chairID,
+		OwnerID:     owner.ID,
+		Name:        req.Name,
+		Model:       req.Model,
+		IsActive:    false,
+		AccessToken: accessToken,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	chairTokenCache.Store(accessToken, newChair)
 
 	http.SetCookie(w, &http.Cookie{
 		Path:  "/",
@@ -155,7 +168,7 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 	location := ChairLocation{ID: chairLocationID, ChairID: chair.ID, Latitude: req.Latitude, Longitude: req.Longitude, CreatedAt: now}
 
 	ride := &Ride{}
-	var newStatus string  //変更後のステータス
+	var newStatus string //変更後のステータス
 	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1`, chair.ID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusInternalServerError, err)
@@ -177,7 +190,6 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 				// rideStatusCache.Store(ride.ID, "PICKUP")
 			}
 
-
 			if req.Latitude == ride.DestinationLatitude && req.Longitude == ride.DestinationLongitude && status == "CARRYING" {
 				if _, err := tx.ExecContext(ctx, "INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)", ulid.Make().String(), ride.ID, "ARRIVED"); err != nil {
 					writeError(w, http.StatusInternalServerError, err)
@@ -195,10 +207,15 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chair.TotalDistanceUpdatedAt.Time = now
+	chair.TotalDistanceUpdatedAt.Valid = true
+	chair.TotalDistance += movedDistance
+	chairTokenCache.Store(chair.AccessToken, *chair)
+
 	if newStatus != "" {
-        rideStatusCache.Store(ride.ID, newStatus)
-        // log.Printf("Updated cache for rideID: %s with status: %s", ride.ID, newStatus)
-    }
+		rideStatusCache.Store(ride.ID, newStatus)
+		// log.Printf("Updated cache for rideID: %s with status: %s", ride.ID, newStatus)
+	}
 
 	writeJSON(w, http.StatusOK, &chairPostCoordinateResponse{
 		RecordedAt: location.CreatedAt.UnixMilli(),
