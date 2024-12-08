@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -24,6 +25,8 @@ type appPostUsersResponse struct {
 	ID             string `json:"id"`
 	InvitationCode string `json:"invitation_code"`
 }
+
+var rideStatusCache sync.Map
 
 func appPostUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -285,8 +288,13 @@ type executableGet interface {
 
 func getLatestRideStatus(ctx context.Context, tx executableGet, rideID string) (string, error) {
 	status := ""
-	if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {
-		return "", err
+	if val, found := rideStatusCache.Load(rideID); found{
+		status = val.(string)
+	} else {
+		if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {
+			return "", err
+		}
+		rideStatusCache.Store(rideID, status)
 	}
 	return status, nil
 }
@@ -354,6 +362,8 @@ func appPostRides(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	rideStatusCache.Store(rideID, "MARCHING")
 
 	var rideCount int
 	if err := tx.GetContext(ctx, &rideCount, `SELECT COUNT(*) FROM rides WHERE user_id = ? `, user.ID); err != nil {
@@ -570,6 +580,8 @@ func appPostRideEvaluatation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	rideStatusCache.Store(rideID, "COMPLETED")
 
 	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE id = ?`, rideID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
