@@ -206,6 +206,8 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
+	rideStatusCache.Clear()
+
 	go func() {
 		if _, err := http.Get("http://isucon-o11y:9000/api/group/collect"); err != nil {
 			log.Printf("failed to communicate with pprotein: %v", err)
