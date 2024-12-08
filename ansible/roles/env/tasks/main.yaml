@@ -1,12 +1,11 @@
 - name: Deploy env.sh
   become: true
-  ansible.builtin.copy:
-    src: "{{ item }}"
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
     dest: "/{{ item }}"
     owner: isucon
     group: isucon
     mode: "0755"
-    backup: true
   notify: restart_webapp
   with_items:
     - home/isucon/env.sh
