@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -85,6 +88,18 @@ type postChairActivityRequest struct {
 	IsActive bool `json:"is_active"`
 }
 
+func getRide(ctx context.Context, tx *sqlx.Tx, chairId string) (Ride, error) {
+	if item, ok := rideCache.Load(chairId); ok {
+		return item.(Ride), nil
+	}
+	var ride Ride
+	if err := tx.GetContext(ctx, &ride, `SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1`, chairId); err != nil {
+		return Ride{}, err
+	}
+	rideCache.Store(chairId, ride)
+	return ride, nil
+}
+
 func chairPostActivity(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	chair := ctx.Value("chair").(*Chair)
@@ -107,6 +122,8 @@ func chairPostActivity(w http.ResponseWriter, r *http.Request) {
 type chairPostCoordinateResponse struct {
 	RecordedAt int64 `json:"recorded_at"`
 }
+
+var rideCache = sync.Map{}
 
 func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -167,9 +184,9 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 
 	location := ChairLocation{ID: chairLocationID, ChairID: chair.ID, Latitude: req.Latitude, Longitude: req.Longitude, CreatedAt: now}
 
-	ride := &Ride{}
+	ride, err := getRide(ctx, tx, chair.ID)
 	var newStatus string //変更後のステータス
-	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1`, chair.ID); err != nil {
+	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
