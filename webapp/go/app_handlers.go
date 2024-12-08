@@ -288,7 +288,7 @@ type executableGet interface {
 
 func getLatestRideStatus(ctx context.Context, tx executableGet, rideID string) (string, error) {
 	status := ""
-	if val, found := rideStatusCache.Load(rideID); found{
+	if val, found := rideStatusCache.Load(rideID); found {
 		status = val.(string)
 	} else {
 		if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {
@@ -912,10 +912,11 @@ func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	chairs := []Chair{}
+	// activeなchairだけを取得
 	err = tx.SelectContext(
 		ctx,
 		&chairs,
-		`SELECT * FROM chairs`,
+		`SELECT * FROM chairs WHERE is_active = 1`,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -924,9 +925,9 @@ func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 
 	nearbyChairs := []appGetNearbyChairsResponseChair{}
 	for _, chair := range chairs {
-		if !chair.IsActive {
-			continue
-		}
+		// if !chair.IsActive {
+		// 	continue
+		// }
 
 		rides := []*Ride{}
 		if err := tx.SelectContext(ctx, &rides, `SELECT * FROM rides WHERE chair_id = ? ORDER BY created_at DESC`, chair.ID); err != nil {
