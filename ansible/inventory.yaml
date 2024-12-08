@@ -30,8 +30,4 @@ all:
         db:
           hosts:
             db:
-              ansible_host: "{{ tailscale_a_records.S1 }}"
-    outsider:
-      hosts:
-        benchmarker:
-          ansible_host: "{{ tailscale_a_records.B }}"
+              ansible_host: "{{ tailscale_a_records.S2 }}"
