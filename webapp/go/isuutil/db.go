@@ -47,8 +47,8 @@ func newIsuconDB(config *mysql.Config) (*sqlx.DB, error) {
 
 	// コネクション数はデフォルトでは無制限になっている。
 	// 数十から数百くらいで要調整。
-	dbx.SetMaxOpenConns(20)
-	dbx.SetMaxIdleConns(20)
+	dbx.SetMaxOpenConns(100)
+	dbx.SetMaxIdleConns(100)
 	dbx.SetConnMaxLifetime(5 * time.Minute)
 
 	// 再起動試験対策
