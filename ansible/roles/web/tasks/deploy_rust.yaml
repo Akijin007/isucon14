@@ -7,7 +7,7 @@
     group: isucon
 
 
-- name: Copy isupipe binary
+- name: Copy isuride binary
   ansible.builtin.copy:
     src: "../webapp/{{ item }}"
     dest: "/home/isucon/webapp/{{ item }}"
@@ -15,15 +15,15 @@
     owner: isucon
     group: isucon
   with_items:
-    - rust/target/release/isupipe
+    - rust/target/release/isuride
     - rust/Dockerfile
     - rust/docker-compose.yaml
   notify: restart_webapp
 
 
-- name: Set up isupipe.rust.service override
+- name: Set up isuride.rust.service override
   community.general.ini_file:
-    dest: /etc/systemd/system/isupipe.rust.service
+    dest: /etc/systemd/system/isuride.rust.service
     owner: root
     group: root
     mode: "0644"
@@ -35,7 +35,7 @@
     - ["ExecStop", "docker compose -f docker-compose.yaml down"]
   notify: restart_webapp
 
-- name: Stop isupipe.go service
+- name: Stop isuride.go service
   ansible.builtin.systemd:
-    name: isupipe.go
+    name: isuride.go
     state: stopped
