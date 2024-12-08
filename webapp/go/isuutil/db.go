@@ -1,7 +1,6 @@
 package isuutil
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
