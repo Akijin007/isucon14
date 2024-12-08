@@ -145,14 +145,46 @@ func dbInitialize() error {
 		"alter table rides add index user_id_created_at_idx(user_id, created_at DESC);",
 		"alter table coupons add index used_by_idx(used_by);",
 	}
+
 	for _, sql := range indexsqls {
 		if err := isuutil.CreateIndexIfNotExists(db, sql); err != nil {
 			return err
 		}
 	}
+
+	columnsqls := []string{
+		"ALTER TABLE chairs ADD total_distance INT DEFAULT 0",
+		"ALTER TABLE chairs ADD total_distance_updated_at DATETIME(6)",
+	}
+	for _, sql := range columnsqls {
+		if _, err := db.Exec(sql); err != nil {
+			return err
+		}
+	}
+	var chairs []Chair
+	query := "SELECT * FROM chairs"
+	if err := db.Select(&chairs, query); err != nil {
+		return err
+	}
+	for _, chair := range chairs {
+		distanceInfo, err := getTotalDistance(chair.ID)
+		if err != nil {
+			return err
+		}
+		// total_distance と total_distance_updated_at を更新
+		_, err = db.Exec(`
+	    UPDATE chairs
+	    SET total_distance = ?,
+	        total_distance_updated_at = ?
+	    WHERE id = ?
+	`, distanceInfo.TotalDistance, distanceInfo.TotalDistanceUpdatedAt, chair.ID)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
-
 
 func postInitialize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -168,7 +200,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := dbInitialize()
-	if err != nil{
+	if err != nil {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
