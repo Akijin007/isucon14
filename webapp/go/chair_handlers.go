@@ -149,6 +149,9 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 更新したchair.idのキャッシュをクリア
+	chairLocationCache.Delete(chair.ID)
+
 	location := ChairLocation{ID: chairLocationID, ChairID: chair.ID, Latitude: req.Latitude, Longitude: req.Longitude, CreatedAt: now}
 
 	ride := &Ride{}

@@ -843,7 +843,18 @@ type appGetNearbyChairsResponseChair struct {
 	CurrentCoordinate Coordinate `json:"current_coordinate"`
 }
 
+var chairLocationCache sync.Map
+
 func getChairLocation(ctx context.Context, tx *sqlx.Tx, chairID string) (*ChairLocation, error) {
+	// キャッシュから取得
+	if val, found := chairLocationCache.Load(chairID); found {
+		if cachedLocation, ok := val.(*ChairLocation); ok {
+			// キャッシュにヒットした場合、ポインタを返す
+			return cachedLocation, nil
+		}
+	}
+
+	// データベースから取得
 	chairLocation := &ChairLocation{}
 	err := tx.GetContext(
 		ctx,
@@ -851,7 +862,14 @@ func getChairLocation(ctx context.Context, tx *sqlx.Tx, chairID string) (*ChairL
 		`SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1`,
 		chairID,
 	)
-	return chairLocation, err
+	if err != nil {
+		return nil, err
+	}
+
+	// キャッシュに格納
+	chairLocationCache.Store(chairID, chairLocation)
+
+	return chairLocation, nil
 }
 func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

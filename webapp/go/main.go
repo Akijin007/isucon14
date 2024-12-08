@@ -26,6 +26,7 @@ func main() {
 	mux := setup()
 	slog.Info("Listening on :8080")
 	go standalone.Integrate(":19001")
+	chairLocationCache.Clear()
 	http.ListenAndServe(":8080", mux)
 }
 
