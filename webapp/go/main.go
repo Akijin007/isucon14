@@ -241,6 +241,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+	rideCache.Clear()
 	rideStatusCache.Clear()
 
 	if err := initCache(); err != nil {
