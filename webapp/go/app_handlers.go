@@ -831,13 +831,13 @@ type appGetNearbyChairsResponseChair struct {
 	CurrentCoordinate Coordinate `json:"current_coordinate"`
 }
 
-func getChairLocation(ctx context.Context, tx *sqlx.Tx, chair Chair) (*ChairLocation, error) {
+func getChairLocation(ctx context.Context, tx *sqlx.Tx, chairID string) (*ChairLocation, error) {
 	chairLocation := &ChairLocation{}
 	err := tx.GetContext(
 		ctx,
 		chairLocation,
 		`SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1`,
-		chair.ID,
+		chairID,
 	)
 	return chairLocation, err
 }
@@ -923,7 +923,7 @@ func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 
 		// 最新の位置情報を取得
 		var chairLocation *ChairLocation
-		chairLocation, err = getChairLocation(ctx, tx, chair)
+		chairLocation, err = getChairLocation(ctx, tx, chair.ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				continue
