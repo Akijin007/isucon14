@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-sql-driver/mysql"
+	"github.com/isucon/isucon14/webapp/go/isuutil"
 	"github.com/jmoiron/sqlx"
 	"github.com/kaz/pprotein/integration/standalone"
 )
@@ -123,6 +124,36 @@ type postInitializeResponse struct {
 	Language string `json:"language"`
 }
 
+func dbInitialize() error {
+	// sqls := []string{
+	// 	"DELETE FROM users WHERE id > 1000",
+	// 	"DELETE FROM posts WHERE id > 10000",
+	// 	"DELETE FROM comments WHERE id > 100000",
+	// 	"UPDATE users SET del_flg = 0",
+	// 	"UPDATE users SET del_flg = 1 WHERE id % 50 = 0",
+	// }
+
+	// for _, sql := range sqls {
+	// 	db.Exec(sql)
+	// }
+
+	indexsqls := []string{
+		"alter table chairs add index access_token_idx(access_token);",
+		"alter table ride_statuses add index ride_id_create_at_idx(ride_id, created_at DESC);",
+		"alter table chair_locations add index chair_id_create_at_idx(chair_id, created_at DESC);",
+		"alter table rides add index chair_id_updated_at_idx(chair_id, updated_at DESC);",
+		"alter table rides add index user_id_created_at_idx(user_id, created_at DESC);",
+		"alter table coupons add index used_by_idx(used_by);",
+	}
+	for _, sql := range indexsqls {
+		if err := isuutil.CreateIndexIfNotExists(db, sql); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+
 func postInitialize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	req := &postInitializeRequest{}
@@ -134,6 +165,12 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 	if out, err := exec.Command("../sql/init.sh").CombinedOutput(); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("failed to initialize: %s: %w", string(out), err))
 		return
+	}
+
+	err := dbInitialize()
+	if err != nil{
+		fmt.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	go func() {
