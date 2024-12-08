@@ -11,9 +11,12 @@
   with_items:
     - 'localhost'
     - 'isucon-o11y'
-    # - "{{ internal_ips.S1 }}"
-    # - "{{ internal_ips.S2 }}"
-    # - "{{ internal_ips.S3 }}"
+    - 'mozyanari-desktop'
+    - 'laptop-akijin'
+    - 'desktop-mo'
+    - "{{ internal_ips.S1 }}"
+    - "{{ internal_ips.S2 }}"
+    - "{{ internal_ips.S3 }}"
 
 - name: Deploy mysqld.cnf
   become: true
