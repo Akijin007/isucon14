@@ -9,10 +9,25 @@ import (
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
 func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	// MEMO: 一旦最も待たせているリクエストに適当な空いている椅子マッチさせる実装とする。おそらくもっといい方法があるはず…
-	ride := &Ride{}
-	if err := db.GetContext(ctx, ride, `SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 1`); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+
+	// トランザクションを開始
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback() // エラー時はロールバック
+
+	// 最大10件のリクエストを取得
+	rides := []*Ride{}
+	if err := db.SelectContext(ctx, &rides, `
+		SELECT * 
+		FROM rides 
+		WHERE chair_id IS NULL 
+		ORDER BY created_at 
+		LIMIT 30
+	`); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || len(rides) == 0 {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -20,31 +35,45 @@ func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	matched := &Chair{}
-	empty := false
-	for i := 0; i < 10; i++ {
-		if err := db.GetContext(ctx, matched, "SELECT * FROM chairs INNER JOIN (SELECT id FROM chairs WHERE is_active = TRUE ORDER BY RAND() LIMIT 1) AS tmp ON chairs.id = tmp.id LIMIT 1"); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			writeError(w, http.StatusInternalServerError, err)
-		}
-
-		if err := db.GetContext(ctx, &empty, "SELECT COUNT(*) = 0 FROM (SELECT COUNT(chair_sent_at) = 6 AS completed FROM ride_statuses WHERE ride_id IN (SELECT id FROM rides WHERE chair_id = ?) GROUP BY ride_id) is_completed WHERE completed = FALSE", matched.ID); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+	// 有効な chairs を取得
+	chairs := []*Chair{}
+	query := `
+		SELECT chairs.* 
+		FROM chairs
+		INNER JOIN chair_models cm ON cm.name = chairs.model
+		WHERE chairs.is_active = TRUE
+		AND NOT EXISTS (
+			SELECT 1
+			FROM ride_statuses rs
+			INNER JOIN rides r ON r.id = rs.ride_id
+			WHERE r.chair_id = chairs.id
+			GROUP BY rs.ride_id
+			HAVING COUNT(rs.chair_sent_at) != 6
+		)
+		ORDER BY cm.speed DESC
+		LIMIT 30;
+	`
+	if err := db.SelectContext(ctx, &chairs, query); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || len(chairs) == 0 {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if empty {
-			break
-		}
-	}
-	if !empty {
-		w.WriteHeader(http.StatusNoContent)
+		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	if _, err := db.ExecContext(ctx, "UPDATE rides SET chair_id = ? WHERE id = ?", matched.ID, ride.ID); err != nil {
+	for i := 0; i < len(rides) && i < len(chairs); i++ {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE rides 
+			SET chair_id = ? 
+			WHERE id = ?`, chairs[i].ID, rides[i].ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	// コミットして変更を確定
+	if err := tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
