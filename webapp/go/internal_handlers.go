@@ -10,6 +10,14 @@ import (
 func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// トランザクションを開始
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	defer tx.Rollback() // エラー時はロールバック
+
 	// 最大10件のリクエストを取得
 	rides := []*Ride{}
 	if err := db.SelectContext(ctx, &rides, `
@@ -53,14 +61,6 @@ func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-
-	// リクエストとチェアを順にマッチング
-	tx, err := db.BeginTx(ctx, nil) // トランザクションを開始
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	defer tx.Rollback() // エラー時はロールバック
 
 	for i := 0; i < len(rides) && i < len(chairs); i++ {
 		if _, err := tx.ExecContext(ctx, `
