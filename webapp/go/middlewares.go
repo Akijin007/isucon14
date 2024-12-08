@@ -5,7 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sync"
 )
+
+var userTokenCache = sync.Map{}
+
+func getUserFromToken(token string) (User, bool) {
+	if item, ok := userTokenCache.Load(token); ok {
+		return item.(User), true
+	}
+	return User{}, false
+}
 
 func appAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -16,18 +26,14 @@ func appAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		accessToken := c.Value
-		user := &User{}
-		err = db.GetContext(ctx, user, "SELECT * FROM users WHERE access_token = ?", accessToken)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusUnauthorized, errors.New("invalid access token"))
-				return
-			}
-			writeError(w, http.StatusInternalServerError, err)
+
+		user, exist := getUserFromToken(accessToken)
+		if !exist {
+			writeError(w, http.StatusUnauthorized, errors.New("invalid access token"))
 			return
 		}
 
-		ctx = context.WithValue(ctx, "user", user)
+		ctx = context.WithValue(ctx, "user", &user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -69,6 +69,8 @@ func setup() http.Handler {
 	}
 	db = _db
 
+	initCache()
+
 	mux := chi.NewRouter()
 	mux.Use(middleware.Logger)
 	mux.Use(middleware.Recoverer)
@@ -186,6 +188,19 @@ func dbInitialize() error {
 	return nil
 }
 
+func initCache() error {
+	userTokenCache.Clear()
+	query := "SELECT * FROM users"
+	var users []User
+	if err := db.Select(&users, query); err != nil {
+		return err
+	}
+	for _, user := range users {
+		userTokenCache.Store(user.AccessToken, user)
+	}
+	return nil
+}
+
 func postInitialize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	req := &postInitializeRequest{}
@@ -204,9 +219,12 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-
 	rideStatusCache.Clear()
 
+	if err := initCache(); err != nil {
+		fmt.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 	go func() {
 		if _, err := http.Get("http://isucon-o11y:9000/api/group/collect"); err != nil {
 			log.Printf("failed to communicate with pprotein: %v", err)
