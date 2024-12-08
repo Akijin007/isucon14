@@ -1,7 +1,7 @@
 # まとめて実行用
 ---
-# - name: Env
-#  ansible.builtin.import_playbook: env.yaml
+- name: Env
+  ansible.builtin.import_playbook: env.yaml
 - name: Db
   ansible.builtin.import_playbook: db.yaml
 - name: Web
