@@ -1,12 +1,13 @@
 package isuutil
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"time"
-	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 )
 
 const (
@@ -36,9 +37,9 @@ func newIsuconDB(config *mysql.Config) (*sqlx.DB, error) {
 	config.InterpolateParams = true
 
 	// OpenTelemetryのSQLインストルメンテーションを有効にすることで、Jaegerから発行されているSQLを見れるようにしている
-	stdDb, err := otelsql.Open(driverName, config.FormatDSN())
+	stdDb, err := sql.Open(driverName, config.FormatDSN())
 	//stdDb, err := sql.Open(driverName, config.FormatDSN())
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to open to DB: %w", err)
 	}
