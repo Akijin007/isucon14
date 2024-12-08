@@ -64,11 +64,16 @@ func setup() http.Handler {
 	dbConfig.DBName = dbname
 	dbConfig.ParseTime = true
 
-	_db, err := sqlx.Connect("mysql", dbConfig.FormatDSN())
+	// _db, err := sqlx.Connect("mysql", dbConfig.FormatDSN())
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// db = _db
+
+	db, err = isuutil.NewIsuconDB(dbConfig)
 	if err != nil {
 		panic(err)
 	}
-	db = _db
 
 	initCache()
 
