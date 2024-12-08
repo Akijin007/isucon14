@@ -1,6 +1,6 @@
 - name: Deploy webapp
   become: true
   ansible.builtin.copy:
-    src: ../webapp/go/isupipe
+    src: ../webapp/go/isuride
     dest: /home/isucon/webapp/go/
   notify: restart_webapp

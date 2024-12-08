@@ -8,7 +8,7 @@
 #     mode: "0644"
 #   notify: restart_nginx
 #   with_items:
-#     - etc/nginx/sites-enabled/isupipe.conf.j2
+#     - etc/nginx/sites-enabled/isuride.conf.j2
 
 - name: Deploy file
   become: true
