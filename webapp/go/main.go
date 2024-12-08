@@ -198,6 +198,17 @@ func initCache() error {
 	for _, user := range users {
 		userTokenCache.Store(user.AccessToken, user)
 	}
+
+	ownerTokenCache.Clear()
+	queryOwner := "SELECT * FROM owners"
+	var owners []Owner
+	if err := db.Select(&owners, queryOwner); err != nil {
+		return err
+	}
+	for _, owner := range owners {
+		ownerTokenCache.Store(owner.AccessToken, owner)
+	}
+
 	return nil
 }
 

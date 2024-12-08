@@ -40,15 +40,25 @@ func ownerPostOwners(w http.ResponseWriter, r *http.Request) {
 	accessToken := secureRandomStr(32)
 	chairRegisterToken := secureRandomStr(32)
 
+	now := time.Now()
 	_, err := db.ExecContext(
 		ctx,
-		"INSERT INTO owners (id, name, access_token, chair_register_token) VALUES (?, ?, ?, ?)",
-		ownerID, req.Name, accessToken, chairRegisterToken,
+		"INSERT INTO owners (id, name, access_token, chair_register_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		ownerID, req.Name, accessToken, chairRegisterToken, now, now,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	newOwner := Owner{
+		ID:                 ownerID,
+		Name:               req.Name,
+		AccessToken:        accessToken,
+		ChairRegisterToken: chairRegisterToken,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	ownerTokenCache.Store(accessToken, newOwner)
 
 	http.SetCookie(w, &http.Cookie{
 		Path:  "/",

@@ -9,12 +9,19 @@ import (
 )
 
 var userTokenCache = sync.Map{}
+var ownerTokenCache = sync.Map{}
 
 func getUserFromToken(token string) (User, bool) {
 	if item, ok := userTokenCache.Load(token); ok {
 		return item.(User), true
 	}
 	return User{}, false
+}
+func getOwnerFromToken(token string) (Owner, bool) {
+	if item, ok := ownerTokenCache.Load(token); ok {
+		return item.(Owner), true
+	}
+	return Owner{}, false
 }
 
 func appAuthMiddleware(next http.Handler) http.Handler {
@@ -47,17 +54,13 @@ func ownerAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		accessToken := c.Value
-		owner := &Owner{}
-		if err := db.GetContext(ctx, owner, "SELECT * FROM owners WHERE access_token = ?", accessToken); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusUnauthorized, errors.New("invalid access token"))
-				return
-			}
-			writeError(w, http.StatusInternalServerError, err)
+		owner, exist := getOwnerFromToken(accessToken)
+		if !exist {
+			writeError(w, http.StatusUnauthorized, errors.New("invalid access token"))
 			return
 		}
 
-		ctx = context.WithValue(ctx, "owner", owner)
+		ctx = context.WithValue(ctx, "owner", &owner)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
