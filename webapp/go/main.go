@@ -210,6 +210,16 @@ func initCache() error {
 		ownerTokenCache.Store(owner.AccessToken, owner)
 	}
 
+	chairTokenCache.Clear()
+	queryChair := "SELECT * FROM chairs"
+	var chairs []Chair
+	if err := db.Select(&chairs, queryChair); err != nil {
+		return err
+	}
+	for _, chair := range chairs {
+		chairTokenCache.Store(chair.AccessToken, chair)
+	}
+
 	return nil
 }
 
