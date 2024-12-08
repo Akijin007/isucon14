@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -24,6 +25,8 @@ type appPostUsersResponse struct {
 	ID             string `json:"id"`
 	InvitationCode string `json:"invitation_code"`
 }
+
+var rideStatusCache sync.Map
 
 func appPostUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -285,8 +288,13 @@ type executableGet interface {
 
 func getLatestRideStatus(ctx context.Context, tx executableGet, rideID string) (string, error) {
 	status := ""
-	if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {
-		return "", err
+	if val, found := rideStatusCache.Load(rideID); found{
+		status = val.(string)
+	} else {
+		if err := tx.GetContext(ctx, &status, `SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1`, rideID); err != nil {
+			return "", err
+		}
+		rideStatusCache.Store(rideID, status)
 	}
 	return status, nil
 }
@@ -431,6 +439,8 @@ func appPostRides(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	rideStatusCache.Store(rideID, "MARCHING")
 
 	writeJSON(w, http.StatusAccepted, &appPostRidesResponse{
 		RideID: rideID,
@@ -625,6 +635,8 @@ func appPostRideEvaluatation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rideStatusCache.Store(rideID, "COMPLETED")
+
 	writeJSON(w, http.StatusOK, &appPostRideEvaluationResponse{
 		CompletedAt: ride.UpdatedAt.UnixMilli(),
 	})
@@ -673,7 +685,7 @@ func appGetNotification(w http.ResponseWriter, r *http.Request) {
 	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`, user.ID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusOK, &appGetNotificationResponse{
-				RetryAfterMs: 30,
+				RetryAfterMs: 1000,
 			})
 			return
 		}
@@ -720,7 +732,7 @@ func appGetNotification(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: ride.CreatedAt.UnixMilli(),
 			UpdateAt:  ride.UpdatedAt.UnixMilli(),
 		},
-		RetryAfterMs: 30,
+		RetryAfterMs: 1000,
 	}
 
 	if ride.ChairID.Valid {
@@ -831,6 +843,34 @@ type appGetNearbyChairsResponseChair struct {
 	CurrentCoordinate Coordinate `json:"current_coordinate"`
 }
 
+var chairLocationCache sync.Map
+
+func getChairLocation(ctx context.Context, tx *sqlx.Tx, chairID string) (*ChairLocation, error) {
+	// キャッシュから取得
+	if val, found := chairLocationCache.Load(chairID); found {
+		if cachedLocation, ok := val.(*ChairLocation); ok {
+			// キャッシュにヒットした場合、ポインタを返す
+			return cachedLocation, nil
+		}
+	}
+
+	// データベースから取得
+	chairLocation := &ChairLocation{}
+	err := tx.GetContext(
+		ctx,
+		chairLocation,
+		`SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1`,
+		chairID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// キャッシュに格納
+	chairLocationCache.Store(chairID, chairLocation)
+
+	return chairLocation, nil
+}
 func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	latStr := r.URL.Query().Get("latitude")
@@ -912,13 +952,8 @@ func appGetNearbyChairs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 最新の位置情報を取得
-		chairLocation := &ChairLocation{}
-		err = tx.GetContext(
-			ctx,
-			chairLocation,
-			`SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1`,
-			chair.ID,
-		)
+		var chairLocation *ChairLocation
+		chairLocation, err = getChairLocation(ctx, tx, chair.ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				continue

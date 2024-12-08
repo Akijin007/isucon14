@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -111,23 +112,50 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	//移動距離の計算と総移動距離の更新
+	lastChairLocation, err := getChairLocation(ctx, tx, chair.ID)
+	prevLatitude := 0
+	prevLongtitude := 0
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	} else {
+		prevLongtitude = lastChairLocation.Longitude
+		prevLatitude = lastChairLocation.Latitude
+	}
+	movedDistance := abs(prevLatitude-req.Latitude) + abs(prevLongtitude-req.Longitude)
+
+	now := time.Now()
+	query := `
+		UPDATE chairs
+		SET 
+			total_distance = total_distance + ?, 
+			total_distance_updated_at = ?
+		WHERE id = ?;`
+	if _, err := tx.ExecContext(ctx, query, movedDistance, now, chair.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	chairLocationID := ulid.Make().String()
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO chair_locations (id, chair_id, latitude, longitude) VALUES (?, ?, ?, ?)`,
-		chairLocationID, chair.ID, req.Latitude, req.Longitude,
+		`INSERT INTO chair_locations (id, chair_id, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?)`,
+		chairLocationID, chair.ID, req.Latitude, req.Longitude, now,
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	location := &ChairLocation{}
-	if err := tx.GetContext(ctx, location, `SELECT * FROM chair_locations WHERE id = ?`, chairLocationID); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
+	// 更新したchair.idのキャッシュをクリア
+	chairLocationCache.Delete(chair.ID)
+
+	location := ChairLocation{ID: chairLocationID, ChairID: chair.ID, Latitude: req.Latitude, Longitude: req.Longitude, CreatedAt: now}
 
 	ride := &Ride{}
+	var newStatus string  //変更後のステータス
 	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1`, chair.ID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusInternalServerError, err)
@@ -145,14 +173,20 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 					writeError(w, http.StatusInternalServerError, err)
 					return
 				}
+				newStatus = "PICKUP"
+				// rideStatusCache.Store(ride.ID, "PICKUP")
 			}
+
 
 			if req.Latitude == ride.DestinationLatitude && req.Longitude == ride.DestinationLongitude && status == "CARRYING" {
 				if _, err := tx.ExecContext(ctx, "INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)", ulid.Make().String(), ride.ID, "ARRIVED"); err != nil {
 					writeError(w, http.StatusInternalServerError, err)
 					return
 				}
+				newStatus = "ARRIVED"
+				// rideStatusCache.Store(ride.ID, "ARRIVED")
 			}
+
 		}
 	}
 
@@ -160,6 +194,11 @@ func chairPostCoordinate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
+	if newStatus != "" {
+        rideStatusCache.Store(ride.ID, newStatus)
+        // log.Printf("Updated cache for rideID: %s with status: %s", ride.ID, newStatus)
+    }
 
 	writeJSON(w, http.StatusOK, &chairPostCoordinateResponse{
 		RecordedAt: location.CreatedAt.UnixMilli(),
@@ -201,7 +240,7 @@ func chairGetNotification(w http.ResponseWriter, r *http.Request) {
 	if err := tx.GetContext(ctx, ride, `SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1`, chair.ID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusOK, &chairGetNotificationResponse{
-				RetryAfterMs: 30,
+				RetryAfterMs: 1000,
 			})
 			return
 		}
@@ -261,7 +300,7 @@ func chairGetNotification(w http.ResponseWriter, r *http.Request) {
 			},
 			Status: status,
 		},
-		RetryAfterMs: 30,
+		RetryAfterMs: 1000,
 	})
 }
 
@@ -310,6 +349,7 @@ func chairPostRideStatus(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		// rideStatusCache.Store(ride.ID, "ENROUTE")
 	// After Picking up user
 	case "CARRYING":
 		status, err := getLatestRideStatus(ctx, tx, ride.ID)
@@ -325,6 +365,7 @@ func chairPostRideStatus(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		// rideStatusCache.Store(ride.ID, "CARRYING")
 	default:
 		writeError(w, http.StatusBadRequest, errors.New("invalid status"))
 	}
@@ -333,6 +374,7 @@ func chairPostRideStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	rideStatusCache.Store(ride.ID, req.Status)
 
 	w.WriteHeader(http.StatusNoContent)
 }
