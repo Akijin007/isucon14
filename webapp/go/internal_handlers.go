@@ -17,7 +17,7 @@ func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 		FROM rides 
 		WHERE chair_id IS NULL 
 		ORDER BY created_at 
-		LIMIT 10
+		LIMIT 30
 	`); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || len(rides) == 0 {
 			w.WriteHeader(http.StatusNoContent)
@@ -43,7 +43,7 @@ func internalGetMatching(w http.ResponseWriter, r *http.Request) {
 			HAVING COUNT(rs.chair_sent_at) != 6
 		)
 		ORDER BY cm.speed DESC
-		LIMIT 10;
+		LIMIT 30;
 	`
 	if err := db.SelectContext(ctx, &chairs, query); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || len(chairs) == 0 {
