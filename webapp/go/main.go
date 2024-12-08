@@ -141,6 +141,7 @@ func dbInitialize() error {
 		"alter table chairs add index access_token_idx(access_token);",
 		"alter table ride_statuses add index ride_id_create_at_idx(ride_id, created_at DESC);",
 		"alter table chair_locations add index chair_id_create_at_idx(chair_id, created_at DESC);",
+		"alter table rides add index chair_id_updated_at_idx(chair_id, updated_at DESC);",
 	}
 	for _, sql := range indexsqls {
 		if err := isuutil.CreateIndexIfNotExists(db, sql); err != nil {
